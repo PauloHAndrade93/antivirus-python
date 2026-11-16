@@ -68,6 +68,10 @@ Sem a chave, o scanner de hash funciona em **modo offline**: só compara contra 
 
 ### 3. Rodar
 
+**Opção fácil (Windows):** duplo-clique em **`av-py.bat`** — abre um menu com todas as ações.
+
+**Opção manual:**
+
 ```bash
 # Scan de uma pasta
 python av.py scan "C:\Users\paulo\Downloads"

@@ -10,6 +10,9 @@ quarantine/*
 logs/*
 !logs/.gitkeep
 
+# Marcador do launcher .bat (gerado na 1a execucao)
+.deps-ok
+
 # Segredos
 .env
 *.key
