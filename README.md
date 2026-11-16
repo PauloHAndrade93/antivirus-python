@@ -8,7 +8,7 @@ Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de ve
 
 ## 🎯 O que o AV-Py faz
 
-Cinco módulos, trabalhando juntos:
+Seis módulos, trabalhando juntos:
 
 | Módulo | O que faz | Técnica profissional por trás |
 |--------|-----------|------------------------------|
@@ -16,7 +16,8 @@ Cinco módulos, trabalhando juntos:
 | **YARA Scanner** | Varre arquivos com regras [YARA](https://virustotal.github.io/yara/), a linguagem padrão de *threat hunting* | *Pattern matching* por família de malware, usado pela indústria toda |
 | **Network Monitor** | Vigia conexões de saída suspeitas (portas de C2, SMTP de processos não-correio, beaconing) | Detecção de **exfiltração** e **command & control** |
 | **Ransom Watcher** | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
-| **Persistence Checker** 🆕 | Audita Run keys do registro, pastas Startup, tarefas agendadas e serviços de auto-início | Detecção de **persistência** (T1547.001, T1053.005, T1543.003) |
+| **Persistence Checker** | Audita Run keys do registro, pastas Startup, tarefas agendadas e serviços de auto-início | Detecção de **persistência** (T1547.001, T1053.005, T1543.003) |
+| **VirusTotal Lookup** 🆕 | Consulta reputação de hash, IP e domínio no VirusTotal (70+ engines consolidados) | *Reputation lookup* como segunda opinião |
 
 Cada detecção do scan pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
 
@@ -34,6 +35,7 @@ antivirus-python/
 │   ├── network_monitor.py      # Monitor de conexões
 │   ├── ransom_watcher.py       # Heurística anti-ransomware (watchdog)
 │   ├── persistence_checker.py  # Auditoria de persistência no Windows
+│   ├── virustotal.py           # Cliente da API v3 do VirusTotal
 │   └── quarantine.py           # Isolamento de arquivos suspeitos
 ├── rules/
 │   └── exemplo.yar             # Regras YARA (comece por aqui)
@@ -85,9 +87,28 @@ python av.py persist
 # Audita persistência mostrando tudo (inventário completo)
 python av.py persist --all
 
+# Consulta VirusTotal (hash, IP ou domínio — autodetecta o tipo)
+python av.py vt 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
+python av.py vt 8.8.8.8 badsite.example.com
+
+# Scan + segunda opinião no VirusTotal para hashes não-casados
+python av.py scan "C:\Users\paulo\Downloads" --vt
+
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### 🔬 Como funciona o VirusTotal Lookup
+
+O [VirusTotal](https://www.virustotal.com/) roda cada amostra em **70+ antivírus** e publica o veredito consolidado. O AV-Py usa isso como *segunda opinião*:
+
+1. **Cadastre uma chave gratuita** em https://www.virustotal.com/gui/my-apikey
+2. Exporte na variável de ambiente `VT_API_KEY`
+3. Use `python av.py vt <alvo>` pra consulta pontual, ou `scan --vt` para integrar ao scan
+
+Níveis emitidos: `malicioso` (≥5 engines), `suspeito` (1–4 engines ou suspicious≥3), `limpo`, `desconhecido` ou `erro`.
+
+**Limite da conta gratuita:** 4 req/min e 500/dia. O cliente respeita o limite automaticamente.
 
 ### 🔎 Como funciona o modo `persist` (verificador de persistência)
 
@@ -139,7 +160,7 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 
 - [x] Watcher de arquivos com `watchdog` (anti-ransomware heurístico)
 - [x] Verificador de persistência (Run keys, Startup, Scheduled Tasks, Serviços)
-- [ ] Reputation lookup via VirusTotal API
+- [x] Reputation lookup via VirusTotal API (hash, IP, domínio + integração no scan)
 - [ ] Dashboard web local (Flask) com histórico de alertas
 - [ ] Integração com MITRE ATT&CK — classificar cada detecção por técnica
 

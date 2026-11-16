@@ -16,7 +16,7 @@ from pathlib import Path
 
 from core import (
     hash_scanner, network_monitor, persistence_checker,
-    quarantine, ransom_watcher, yara_scanner,
+    quarantine, ransom_watcher, virustotal, yara_scanner,
 )
 
 PASTA_REGRAS = Path(__file__).parent / "rules"
@@ -62,6 +62,39 @@ def cmd_scan(args: argparse.Namespace) -> int:
         print(f"     sha256: {d.sha256}")
         print(f"     fonte:  {d.fonte} / {d.detalhe}")
 
+    # VT lookup opcional: pega os hashes dos arquivos escaneados que nao
+    # casaram com a lista local, e pergunta ao VirusTotal se ele conhece.
+    # Respeita rate limit (4/min). So vale se o usuario pediu --vt e tiver chave.
+    deteccoes_vt: list[hash_scanner.Deteccao] = []
+    vt_key = os.environ.get("VT_API_KEY", "")
+    if args.vt:
+        if not vt_key:
+            alerta("--vt pedido mas VT_API_KEY nao esta no ambiente. Pulando VT.")
+        else:
+            info("VirusTotal: verificando hashes nao-casados (pode demorar pelo rate limit)...")
+            hashes_ja_detectados = {d.sha256 for d in deteccoes_hash}
+            analisados: set[str] = set()
+            for arquivo in hash_scanner.iter_arquivos(raiz):
+                try:
+                    if arquivo.stat().st_size > 32 * 1024 * 1024:  # VT free: 32MB
+                        continue
+                    digest = hash_scanner.sha256_do_arquivo(arquivo)
+                except (OSError, PermissionError):
+                    continue
+                if digest in hashes_ja_detectados or digest in analisados:
+                    continue
+                analisados.add(digest)
+                v = virustotal.consultar_hash(digest, vt_key)
+                if v.nivel in ("malicioso", "suspeito"):
+                    alerta(f"VT match: {arquivo}")
+                    print(f"     {v.resumo()}")
+                    deteccoes_vt.append(
+                        hash_scanner.Deteccao(
+                            arquivo=arquivo, sha256=digest,
+                            fonte="virustotal", detalhe=v.resumo(),
+                        )
+                    )
+
     # YARA scan
     try:
         ruleset = yara_scanner.compilar_regras(PASTA_REGRAS)
@@ -79,6 +112,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
     # Quarentena
     if args.quarantine:
         alvos = {d.arquivo: ("hash", d.sha256, d.detalhe) for d in deteccoes_hash}
+        for d in deteccoes_vt:
+            alvos.setdefault(d.arquivo, ("virustotal", d.sha256, d.detalhe))
         for m in matches:
             alvos.setdefault(m.arquivo, ("yara", None, f"{m.regra} {m.tags}"))
 
@@ -89,7 +124,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             except OSError as e:
                 alerta(f"Nao consegui isolar {arquivo}: {e}")
 
-    if not deteccoes_hash and not matches:
+    if not deteccoes_hash and not matches and not deteccoes_vt:
         ok("Nenhuma ameaca encontrada.")
         return 0
     return 1
@@ -130,6 +165,23 @@ def cmd_watch(args: argparse.Namespace) -> int:
         alerta(f"Total de alertas gerados: {len(alertas)}  (log: {LOG_RANSOM})")
         return 1
     ok("Nenhum comportamento de ransomware observado.")
+    return 0
+
+
+def cmd_vt(args: argparse.Namespace) -> int:
+    api_key = os.environ.get("VT_API_KEY", "")
+    if not api_key:
+        alerta("Variavel VT_API_KEY nao configurada. Cadastre uma chave gratuita em")
+        alerta("https://www.virustotal.com/gui/my-apikey e exporte VT_API_KEY.")
+        return 2
+    for alvo in args.alvos:
+        v = virustotal.consultar_auto(alvo, api_key)
+        if v.nivel in ("malicioso", "suspeito"):
+            alerta(v.resumo())
+        elif v.nivel == "erro":
+            alerta(v.resumo())
+        else:
+            info(v.resumo())
     return 0
 
 
@@ -199,6 +251,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("pasta", help="Pasta a escanear.")
     s.add_argument("--quarantine", action="store_true",
                    help="Move arquivos detectados para quarentena.")
+    s.add_argument("--vt", action="store_true",
+                   help="Tambem consulta hashes nao-casados no VirusTotal (requer VT_API_KEY).")
     s.set_defaults(func=cmd_scan)
 
     n = sub.add_parser("netmon", help="Monitor de rede defensivo.")
@@ -207,6 +261,10 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--janela", type=int, default=90,
                    help="Janela em segundos (modo beacon). Padrao 90.")
     n.set_defaults(func=cmd_netmon)
+
+    vt = sub.add_parser("vt", help="Consulta VirusTotal (hash, IP ou dominio).")
+    vt.add_argument("alvos", nargs="+", help="Um ou mais hashes, IPs ou dominios.")
+    vt.set_defaults(func=cmd_vt)
 
     pr = sub.add_parser("persist", help="Audita pontos de persistencia do Windows.")
     pr.add_argument("--all", action="store_true",
