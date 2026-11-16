@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from core import (
-    hash_scanner, network_monitor, persistence_checker,
+    full_scan, hash_scanner, network_monitor, persistence_checker,
     quarantine, ransom_watcher, virustotal, yara_scanner,
 )
 
@@ -168,6 +168,88 @@ def cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fullscan(args: argparse.Namespace) -> int:
+    drives = full_scan.listar_drives()
+
+    letras = None
+    if args.drive:
+        letras = {d.strip().rstrip("\\").upper() + ("" if d.endswith(":") else ":") for d in args.drive}
+    drives = full_scan.filtrar_drives(
+        drives, apenas_usb=args.usb_only, somente_letras=letras,
+    )
+    if not drives:
+        alerta("Nenhum drive selecionado para escanear.")
+        return 2
+
+    info("Drives selecionados:")
+    for d in drives:
+        print(f"  - {d.letra}  tipo={d.tipo}  fs={d.fstype}")
+
+    # Prepara motores
+    lista_local = hash_scanner.carregar_lista_local(LISTA_HASH_LOCAL)
+    api_key_mb = os.environ.get("MALWAREBAZAAR_API_KEY") if args.use_mb else None
+    try:
+        ruleset = yara_scanner.compilar_regras(PASTA_REGRAS)
+    except RuntimeError as e:
+        alerta(f"YARA pulado: {e}")
+        ruleset = None
+
+    progresso = full_scan.Progresso(inicio=__import__("time").time())
+    todas: list[full_scan.DeteccaoCompleta] = []
+
+    def _mostra(prog: full_scan.Progresso) -> None:
+        print(f"  {prog.resumo()}")
+
+    try:
+        for d in drives:
+            info(f"Varrendo {d.letra} ({d.tipo})...")
+            deteccoes, progresso = full_scan.escanear_drive(
+                drive=d,
+                lista_hash_local=lista_local,
+                api_key_mb=api_key_mb,
+                ruleset_yara=ruleset,
+                tamanho_max_mb=args.max_mb,
+                intervalo_progresso=args.progresso,
+                on_progresso=_mostra,
+                progresso=progresso,
+            )
+            todas.extend(deteccoes)
+    except KeyboardInterrupt:
+        alerta("Interrompido pelo usuario (Ctrl+C).")
+
+    # Relatorio final
+    rel = Path(__file__).parent / "logs" / f"fullscan_{__import__('time').strftime('%Y%m%d-%H%M%S')}.log"
+    rel.parent.mkdir(parents=True, exist_ok=True)
+    with open(rel, "w", encoding="utf-8") as f:
+        f.write(progresso.resumo("final") + "\n\n")
+        for det in todas:
+            linha = f"[{det.motor}] {det.arquivo}  -  {det.detalhe}"
+            if det.sha256:
+                linha += f"  sha256={det.sha256}"
+            f.write(linha + "\n")
+    ok(f"Relatorio: {rel}")
+
+    print("\n" + progresso.resumo("final"))
+    if todas:
+        alerta(f"{len(todas)} deteccao(oes). Veja o relatorio acima.")
+        for det in todas[:50]:  # limita o print; o log tem tudo
+            print(f"  [{det.motor}] {det.arquivo}")
+            print(f"       {det.detalhe}")
+        if args.quarantine:
+            isolados = 0
+            for det in todas:
+                try:
+                    quarantine.isolar(det.arquivo, motivo=f"{det.motor}:{det.detalhe}", sha256=det.sha256)
+                    isolados += 1
+                except OSError as e:
+                    alerta(f"Nao consegui isolar {det.arquivo}: {e}")
+            ok(f"{isolados} arquivo(s) isolado(s) em quarantine/.")
+        return 1
+
+    ok("Nenhuma ameaca encontrada.")
+    return 0
+
+
 def cmd_vt(args: argparse.Namespace) -> int:
     api_key = os.environ.get("VT_API_KEY", "")
     if not api_key:
@@ -261,6 +343,21 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--janela", type=int, default=90,
                    help="Janela em segundos (modo beacon). Padrao 90.")
     n.set_defaults(func=cmd_netmon)
+
+    fs = sub.add_parser("fullscan", help="Escaneia drives inteiros (HD, SSD, pendrive).")
+    fs.add_argument("--drive", action="append",
+                    help="Limita a esse(s) drive(s), ex.: --drive C: --drive E:. Sem = todos os fixos+removiveis.")
+    fs.add_argument("--usb-only", action="store_true",
+                    help="So drives removiveis (pendrive, cartao SD, HD externo USB).")
+    fs.add_argument("--max-mb", type=int, default=100,
+                    help="Tamanho maximo por arquivo em MB (padrao 100).")
+    fs.add_argument("--progresso", type=int, default=500,
+                    help="Imprime progresso a cada N arquivos (padrao 500).")
+    fs.add_argument("--use-mb", action="store_true",
+                    help="Tambem consulta MalwareBazaar nos hashes (requer MALWAREBAZAAR_API_KEY).")
+    fs.add_argument("--quarantine", action="store_true",
+                    help="Isola o que for detectado em quarantine/.")
+    fs.set_defaults(func=cmd_fullscan)
 
     vt = sub.add_parser("vt", help="Consulta VirusTotal (hash, IP ou dominio).")
     vt.add_argument("alvos", nargs="+", help="Um ou mais hashes, IPs ou dominios.")

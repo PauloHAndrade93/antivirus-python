@@ -45,6 +45,12 @@ echo     2. Escanear outra pasta...
 echo     3. Escanear pasta Downloads com --quarantine (isola o que achar)
 echo     4. Escanear pasta com segunda opiniao do VirusTotal (--vt)
 echo.
+echo   FULL SCAN (drives inteiros)
+echo    13. Escanear TODOS os drives (HD + SSD + pendrives)
+echo    14. Escanear apenas pendrives / drives USB
+echo    15. Escanear um drive especifico...
+echo    16. Escanear TODOS os drives com quarentena automatica
+echo.
 echo   MONITORAMENTO
 echo     5. Snapshot de conexoes de rede suspeitas
 echo     6. Observar beaconing (90s)
@@ -78,6 +84,10 @@ if "%opcao%"=="9"  goto persist
 if "%opcao%"=="10" goto persist_all
 if "%opcao%"=="11" goto vt
 if "%opcao%"=="12" goto quarantine_list
+if "%opcao%"=="13" goto fullscan_todos
+if "%opcao%"=="14" goto fullscan_usb
+if "%opcao%"=="15" goto fullscan_drive
+if "%opcao%"=="16" goto fullscan_quarentena
 if "%opcao%"=="0"  goto sair
 
 echo [!] Opcao invalida.
@@ -168,6 +178,32 @@ rem ---- QUARENTENA -----------------------------------------------------
 
 :quarantine_list
 python av.py quarantine --list
+goto pausa
+
+rem ---- FULLSCAN -------------------------------------------------------
+
+:fullscan_todos
+echo [i] Full scan em todos os drives fixos e removiveis. Vai demorar.
+echo     Ctrl+C aborta. O relatorio final vai para logs\fullscan_*.log.
+python av.py fullscan
+goto pausa
+
+:fullscan_usb
+echo [i] Full scan APENAS em drives removiveis (pendrives, HD USB, SD).
+python av.py fullscan --usb-only
+goto pausa
+
+:fullscan_drive
+set "letra="
+set /p "letra=Letra do drive (ex: C, E): "
+if "!letra!"=="" goto menu
+python av.py fullscan --drive "!letra!:"
+goto pausa
+
+:fullscan_quarentena
+echo [i] Full scan com quarentena automatica (isola o que achar).
+echo     Revise a pasta quarantine\ antes de apagar.
+python av.py fullscan --quarantine
 goto pausa
 
 rem ---- CONTROLE -------------------------------------------------------

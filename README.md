@@ -8,16 +8,17 @@ Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de ve
 
 ## 🎯 O que o AV-Py faz
 
-Seis módulos, trabalhando juntos:
+Sete módulos, trabalhando juntos:
 
 | Módulo | O que faz | Técnica profissional por trás |
 |--------|-----------|------------------------------|
 | **Hash Scanner** | Calcula o SHA-256 de cada arquivo e consulta a base pública do [MalwareBazaar](https://bazaar.abuse.ch/) | *IoC matching* por hash — o modo mais rápido de pegar malware conhecido |
 | **YARA Scanner** | Varre arquivos com regras [YARA](https://virustotal.github.io/yara/), a linguagem padrão de *threat hunting* | *Pattern matching* por família de malware, usado pela indústria toda |
+| **Full Scan** 🆕 | Varre **drives inteiros** — HD, SSD, pendrive, cartão SD — com progresso em tempo real e exclusões inteligentes | *Full endpoint sweep*, como um AV comercial faz no "Verificação completa" |
 | **Network Monitor** | Vigia conexões de saída suspeitas (portas de C2, SMTP de processos não-correio, beaconing) | Detecção de **exfiltração** e **command & control** |
 | **Ransom Watcher** | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
 | **Persistence Checker** | Audita Run keys do registro, pastas Startup, tarefas agendadas e serviços de auto-início | Detecção de **persistência** (T1547.001, T1053.005, T1543.003) |
-| **VirusTotal Lookup** 🆕 | Consulta reputação de hash, IP e domínio no VirusTotal (70+ engines consolidados) | *Reputation lookup* como segunda opinião |
+| **VirusTotal Lookup** | Consulta reputação de hash, IP e domínio no VirusTotal (70+ engines consolidados) | *Reputation lookup* como segunda opinião |
 
 Cada detecção do scan pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
 
@@ -36,6 +37,7 @@ antivirus-python/
 │   ├── ransom_watcher.py       # Heurística anti-ransomware (watchdog)
 │   ├── persistence_checker.py  # Auditoria de persistência no Windows
 │   ├── virustotal.py           # Cliente da API v3 do VirusTotal
+│   ├── full_scan.py            # Varredura completa de drives (HD/SSD/USB)
 │   └── quarantine.py           # Isolamento de arquivos suspeitos
 ├── rules/
 │   └── exemplo.yar             # Regras YARA (comece por aqui)
@@ -95,12 +97,41 @@ python av.py persist --all
 python av.py vt 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
 python av.py vt 8.8.8.8 badsite.example.com
 
+# FULL SCAN — todos os drives (HD + SSD + pendrives) com progresso
+python av.py fullscan
+
+# Só pendrives e HDs externos
+python av.py fullscan --usb-only
+
+# Só o drive E:
+python av.py fullscan --drive E:
+
+# Full scan isolando o que achar
+python av.py fullscan --quarantine
+
 # Scan + segunda opinião no VirusTotal para hashes não-casados
 python av.py scan "C:\Users\paulo\Downloads" --vt
 
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### 💽 Como funciona o Full Scan
+
+O `fullscan` escaneia **drives inteiros** — HDs, SSDs, pendrives, cartões SD. Ele:
+
+1. **Enumera todos os drives** montados e identifica o tipo (fixo, removível, CD, rede).
+2. **Aplica filtros** (`--usb-only`, `--drive E:`), pulando por padrão drives de rede e CDs.
+3. **Pula pastas caras e irrelevantes** como `Windows\WinSxS`, `$Recycle.Bin`, `System Volume Information`, `Program Files\WindowsApps`, `node_modules`, `.git`, caches de browser e a própria `quarantine/` (pra não reescanear).
+4. **Pula arquivos especiais** como `pagefile.sys` e `hiberfil.sys`.
+5. Para cada arquivo, roda **hash** (SHA-256 + lista local + opcional MalwareBazaar com `--use-mb`) e **YARA**.
+6. **Mostra progresso** a cada 500 arquivos (configurável com `--progresso`).
+7. **Trata sem crashear** permissão negada, arquivo em uso, etc.
+8. No final, **grava relatório** completo em `logs/fullscan_<timestamp>.log`.
+
+⏱️ **Duração típica:** um drive de 500 GB com uns 200k arquivos leva algo entre **20 minutos e 1 hora**, dependendo do SSD/HD. Um pendrive de 32 GB sai em poucos minutos.
+
+🔐 **Não precisa de admin.** Arquivos protegidos por ACL simplesmente aparecem como "erro" no contador e são pulados.
 
 ### 🔬 Como funciona o VirusTotal Lookup
 
