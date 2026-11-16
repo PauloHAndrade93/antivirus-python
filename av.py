@@ -14,10 +14,11 @@ import os
 import sys
 from pathlib import Path
 
-from core import hash_scanner, network_monitor, quarantine, yara_scanner
+from core import hash_scanner, network_monitor, quarantine, ransom_watcher, yara_scanner
 
 PASTA_REGRAS = Path(__file__).parent / "rules"
 LISTA_HASH_LOCAL = PASTA_REGRAS / "hashes_locais.txt"
+LOG_RANSOM = Path(__file__).parent / "logs" / "ransom.log"
 
 
 # ---------- utilidades de impressao ---------- #
@@ -109,6 +110,26 @@ def cmd_netmon(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    pastas = [Path(p) for p in args.pastas]
+    try:
+        alertas = ransom_watcher.observar(
+            pastas=pastas,
+            log_alertas=LOG_RANSOM,
+            janela_segundos=args.janela,
+            limite_eventos=args.limite,
+            duracao_segundos=args.duracao,
+        )
+    except RuntimeError as e:
+        alerta(str(e))
+        return 2
+    if alertas:
+        alerta(f"Total de alertas gerados: {len(alertas)}  (log: {LOG_RANSOM})")
+        return 1
+    ok("Nenhum comportamento de ransomware observado.")
+    return 0
+
+
 def cmd_quarantine(args: argparse.Namespace) -> int:
     if args.list:
         entradas = quarantine.listar()
@@ -145,6 +166,16 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--janela", type=int, default=90,
                    help="Janela em segundos (modo beacon). Padrao 90.")
     n.set_defaults(func=cmd_netmon)
+
+    w = sub.add_parser("watch", help="Observa pastas contra ransomware (heuristico).")
+    w.add_argument("pastas", nargs="+", help="Pasta(s) a observar recursivamente.")
+    w.add_argument("--janela", type=int, default=10,
+                   help="Janela deslizante em segundos (padrao 10).")
+    w.add_argument("--limite", type=int, default=30,
+                   help="Eventos na janela para disparar alerta de massa (padrao 30).")
+    w.add_argument("--duracao", type=int, default=None,
+                   help="Duracao total em segundos. Omitir = roda ate Ctrl+C.")
+    w.set_defaults(func=cmd_watch)
 
     q = sub.add_parser("quarantine", help="Gerencia quarentena.")
     q.add_argument("--list", action="store_true", help="Lista arquivos em quarentena.")

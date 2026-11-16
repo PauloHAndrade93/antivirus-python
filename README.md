@@ -6,17 +6,18 @@ Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de ve
 
 ---
 
-## 🎯 O que o MVP faz
+## 🎯 O que o AV-Py faz
 
-Três módulos, trabalhando juntos:
+Quatro módulos, trabalhando juntos:
 
 | Módulo | O que faz | Técnica profissional por trás |
 |--------|-----------|------------------------------|
 | **Hash Scanner** | Calcula o SHA-256 de cada arquivo e consulta a base pública do [MalwareBazaar](https://bazaar.abuse.ch/) | *IoC matching* por hash — o modo mais rápido de pegar malware conhecido |
 | **YARA Scanner** | Varre arquivos com regras [YARA](https://virustotal.github.io/yara/), a linguagem padrão de *threat hunting* | *Pattern matching* por família de malware, usado pela indústria toda |
 | **Network Monitor** | Vigia conexões de saída suspeitas (portas de C2, SMTP de processos não-correio, beaconing) | Detecção de **exfiltração** e **command & control** |
+| **Ransom Watcher** 🆕 | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
 
-Cada detecção pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
+Cada detecção do scan pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
 
 ---
 
@@ -30,6 +31,7 @@ antivirus-python/
 │   ├── hash_scanner.py         # SHA-256 + MalwareBazaar
 │   ├── yara_scanner.py         # Engine YARA
 │   ├── network_monitor.py      # Monitor de conexões
+│   ├── ransom_watcher.py       # Heurística anti-ransomware (watchdog)
 │   └── quarantine.py           # Isolamento de arquivos suspeitos
 ├── rules/
 │   └── exemplo.yar             # Regras YARA (comece por aqui)
@@ -72,9 +74,22 @@ python av.py scan "C:\Users\paulo\Downloads" --quarantine
 # Monitor de rede (contínuo, Ctrl+C para parar)
 python av.py netmon
 
+# Vigia pastas sensíveis contra ransomware (Ctrl+C para parar)
+python av.py watch "C:\Users\paulo\Documents" "C:\Users\paulo\Desktop"
+
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### 🛡️ Como funciona o modo `watch` (anti-ransomware)
+
+Enquanto ele roda, três gatilhos disparam alertas, independentes:
+
+1. **Massa** — muitos eventos de arquivo em janela curta (padrão: 30 em 10s). Ransomware cifra rápido.
+2. **Extensão** — qualquer arquivo nascendo com extensão típica (`.locked`, `.wncry`, `.ryk`, `.encrypted`...).
+3. **Nota de resgate** — arquivos criados com nomes como `HOW_TO_DECRYPT.txt`, `README_RECOVERY.html`.
+
+Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para `logs/ransom.log` (um JSONL por linha) pra análise posterior.
 
 ---
 
@@ -94,9 +109,9 @@ python av.py quarantine --list
 
 ---
 
-## 🧭 Roadmap depois do MVP
+## 🧭 Roadmap
 
-- [ ] Watcher de arquivos com `watchdog` (anti-ransomware heurístico: cifragem em massa)
+- [x] Watcher de arquivos com `watchdog` (anti-ransomware heurístico)
 - [ ] Verificador de persistência (Run keys, Startup, Scheduled Tasks)
 - [ ] Reputation lookup via VirusTotal API
 - [ ] Dashboard web local (Flask) com histórico de alertas
