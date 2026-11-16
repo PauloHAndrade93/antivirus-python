@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data — nunca versionar
+quarantine/*
+!quarantine/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Segredos
+.env
+*.key
+MALWAREBAZAAR_API_KEY*

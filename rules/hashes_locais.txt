@@ -1,0 +1,6 @@
+# Lista local de hashes SHA-256 de malware conhecido (modo offline).
+# Um hash por linha, em minusculas. Linhas iniciadas por # sao ignoradas.
+# Popule com hashes de IoCs confiaveis (MalwareBazaar, abuse.ch, CISA).
+#
+# Exemplo (hash do EICAR - arquivo de teste oficial, inofensivo):
+275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
