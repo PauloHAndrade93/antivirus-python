@@ -173,7 +173,12 @@ def cmd_fullscan(args: argparse.Namespace) -> int:
 
     letras = None
     if args.drive:
-        letras = {d.strip().rstrip("\\").upper() + ("" if d.endswith(":") else ":") for d in args.drive}
+        # Aceita: "C", "C:", "C:\\", "c", "c:\\" -> sempre normaliza para "C:"
+        letras = set()
+        for d in args.drive:
+            s = d.strip().rstrip("\\").rstrip(":").upper()
+            if s:
+                letras.add(s + ":")
     drives = full_scan.filtrar_drives(
         drives, apenas_usb=args.usb_only, somente_letras=letras,
     )

@@ -197,7 +197,8 @@ goto pausa
 set "letra="
 set /p "letra=Letra do drive (ex: C, E): "
 if "!letra!"=="" goto menu
-python av.py fullscan --drive "!letra!:"
+rem Aceita "C", "C:" ou "C:\" - o lado Python normaliza.
+python av.py fullscan --drive "!letra!"
 goto pausa
 
 :fullscan_quarentena
