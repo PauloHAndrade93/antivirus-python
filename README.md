@@ -8,14 +8,15 @@ Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de ve
 
 ## 🎯 O que o AV-Py faz
 
-Quatro módulos, trabalhando juntos:
+Cinco módulos, trabalhando juntos:
 
 | Módulo | O que faz | Técnica profissional por trás |
 |--------|-----------|------------------------------|
 | **Hash Scanner** | Calcula o SHA-256 de cada arquivo e consulta a base pública do [MalwareBazaar](https://bazaar.abuse.ch/) | *IoC matching* por hash — o modo mais rápido de pegar malware conhecido |
 | **YARA Scanner** | Varre arquivos com regras [YARA](https://virustotal.github.io/yara/), a linguagem padrão de *threat hunting* | *Pattern matching* por família de malware, usado pela indústria toda |
 | **Network Monitor** | Vigia conexões de saída suspeitas (portas de C2, SMTP de processos não-correio, beaconing) | Detecção de **exfiltração** e **command & control** |
-| **Ransom Watcher** 🆕 | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
+| **Ransom Watcher** | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
+| **Persistence Checker** 🆕 | Audita Run keys do registro, pastas Startup, tarefas agendadas e serviços de auto-início | Detecção de **persistência** (T1547.001, T1053.005, T1543.003) |
 
 Cada detecção do scan pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
 
@@ -32,6 +33,7 @@ antivirus-python/
 │   ├── yara_scanner.py         # Engine YARA
 │   ├── network_monitor.py      # Monitor de conexões
 │   ├── ransom_watcher.py       # Heurística anti-ransomware (watchdog)
+│   ├── persistence_checker.py  # Auditoria de persistência no Windows
 │   └── quarantine.py           # Isolamento de arquivos suspeitos
 ├── rules/
 │   └── exemplo.yar             # Regras YARA (comece por aqui)
@@ -77,9 +79,33 @@ python av.py netmon
 # Vigia pastas sensíveis contra ransomware (Ctrl+C para parar)
 python av.py watch "C:\Users\paulo\Documents" "C:\Users\paulo\Desktop"
 
+# Audita persistência (só itens suspeitos)
+python av.py persist
+
+# Audita persistência mostrando tudo (inventário completo)
+python av.py persist --all
+
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### 🔎 Como funciona o modo `persist` (verificador de persistência)
+
+Malware precisa sobreviver ao reboot. Só existem alguns lugares onde isso cabe no Windows, e o `persist` olha todos eles:
+
+| Local | Técnica MITRE |
+|-------|---------------|
+| Chaves `Run` / `RunOnce` do Registro (HKLM e HKCU) | T1547.001 |
+| Pastas `Startup` do usuário e de todos os usuários | T1547.001 |
+| Tarefas agendadas (fora de `\Microsoft\`) | T1053.005 |
+| Serviços com `Start = Auto` fora do padrão | T1543.003 |
+
+Para cada entrada ele aplica heurísticas e sinaliza quando bate em:
+- Caminho em `AppData\Local\Temp`, `Downloads`, `Users\Public` ou lixeira
+- Comando com `powershell -EncodedCommand`, `-w hidden`, `mshta http`, `certutil -urlcache`, `bitsadmin /transfer`, `IEX`, `Invoke-Expression`
+- Muita aspa (ofuscação) ou base64 embutido
+
+Sem `--all`, ele mostra **só o que levantou sinal**. Ele não remove nada — a decisão é sua.
 
 ### 🛡️ Como funciona o modo `watch` (anti-ransomware)
 
@@ -112,7 +138,7 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 ## 🧭 Roadmap
 
 - [x] Watcher de arquivos com `watchdog` (anti-ransomware heurístico)
-- [ ] Verificador de persistência (Run keys, Startup, Scheduled Tasks)
+- [x] Verificador de persistência (Run keys, Startup, Scheduled Tasks, Serviços)
 - [ ] Reputation lookup via VirusTotal API
 - [ ] Dashboard web local (Flask) com histórico de alertas
 - [ ] Integração com MITRE ATT&CK — classificar cada detecção por técnica

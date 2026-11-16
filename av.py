@@ -14,7 +14,10 @@ import os
 import sys
 from pathlib import Path
 
-from core import hash_scanner, network_monitor, quarantine, ransom_watcher, yara_scanner
+from core import (
+    hash_scanner, network_monitor, persistence_checker,
+    quarantine, ransom_watcher, yara_scanner,
+)
 
 PASTA_REGRAS = Path(__file__).parent / "rules"
 LISTA_HASH_LOCAL = PASTA_REGRAS / "hashes_locais.txt"
@@ -130,6 +133,44 @@ def cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_persist(args: argparse.Namespace) -> int:
+    resultado = persistence_checker.verificar_tudo()
+
+    rotulos = {
+        "registry": "Chaves Run do Registro (T1547.001)",
+        "startup": "Pastas Startup (T1547.001)",
+        "tarefa":  "Tarefas agendadas (T1053.005)",
+        "servico": "Servicos com inicio automatico (T1543.003)",
+    }
+
+    total = 0
+    suspeitos = 0
+    for chave, itens in resultado.items():
+        mostrar = itens if args.all else [i for i in itens if i.suspeito]
+        if not mostrar and not args.all:
+            continue
+        info(f"=== {rotulos[chave]} ===")
+        if not mostrar:
+            print("    (vazio)")
+        for it in mostrar:
+            total += 1
+            prefixo = "[!]" if it.suspeito else "[ ]"
+            if it.suspeito:
+                suspeitos += 1
+            print(f"  {prefixo} {it.nome}")
+            print(f"       local:   {it.localizacao}")
+            print(f"       comando: {it.comando}")
+            for s in it.sinais:
+                print(f"       sinal:   {s}")
+
+    print()
+    if suspeitos:
+        alerta(f"{suspeitos} item(ns) suspeito(s) de {total} exibido(s).")
+        return 1
+    ok(f"Nenhuma persistencia suspeita detectada (varreu {sum(len(v) for v in resultado.values())} entrada(s) no total).")
+    return 0
+
+
 def cmd_quarantine(args: argparse.Namespace) -> int:
     if args.list:
         entradas = quarantine.listar()
@@ -166,6 +207,11 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--janela", type=int, default=90,
                    help="Janela em segundos (modo beacon). Padrao 90.")
     n.set_defaults(func=cmd_netmon)
+
+    pr = sub.add_parser("persist", help="Audita pontos de persistencia do Windows.")
+    pr.add_argument("--all", action="store_true",
+                    help="Lista tudo, nao so os suspeitos.")
+    pr.set_defaults(func=cmd_persist)
 
     w = sub.add_parser("watch", help="Observa pastas contra ransomware (heuristico).")
     w.add_argument("pastas", nargs="+", help="Pasta(s) a observar recursivamente.")
