@@ -31,22 +31,34 @@ rule Powershell_Suspeito_Download_Execucao
         severidade = "alta"
 
     strings:
-        $iex        = "IEX" nocase
-        $invoke     = "Invoke-Expression" nocase
-        $webclient  = "Net.WebClient" nocase
-        $downstr    = "DownloadString" nocase
-        $hidden     = "-w hidden" nocase
-        $enc        = "-EncodedCommand" nocase
+        // Download + execucao in-memory (ambos sao necessarios)
+        $down1 = "DownloadString" nocase
+        $down2 = "DownloadData" nocase
+        $down3 = "Net.WebClient" nocase
+        $down4 = "Invoke-WebRequest" nocase
+        $down5 = "Invoke-RestMethod" nocase
+
+        $exec1 = "IEX" nocase
+        $exec2 = "Invoke-Expression" nocase
+        $exec3 = "-EncodedCommand" nocase
+        $exec4 = "FromBase64String" nocase
+
+        // Ofuscacao / stealth que confirma intent malicioso
+        $stealth1 = "-w hidden" nocase
+        $stealth2 = "-WindowStyle Hidden" nocase
+        $stealth3 = "-NoProfile -ExecutionPolicy Bypass" nocase
+        $stealth4 = "-nop -ep bypass" nocase
 
     condition:
-        2 of them
+        (any of ($down*) and any of ($exec*))
+        or (any of ($stealth*) and any of ($exec*))
 }
 
 
 rule Python_Keylogger_Heuristica
 {
     meta:
-        descricao = "Imports tipicos de keylogger em Python (pynput + SMTP)"
+        descricao = "Imports tipicos de keylogger em Python (pynput + SMTP + Listener)"
         mitre      = "T1056.001 Keylogging; T1048 Exfiltration over C2"
         severidade = "alta"
 
@@ -56,9 +68,11 @@ rule Python_Keylogger_Heuristica
         $smtp1   = "smtplib"
         $smtp2   = "smtp.gmail.com"
         $listener= "Listener(on_press"
+        $send1   = "sendmail"
+        $send2   = "starttls" nocase
 
     condition:
-        ($pynput1 or $pynput2) and (any of ($smtp*)) and $listener
+        ($pynput1 or $pynput2) and any of ($smtp*) and $listener and any of ($send*)
 }
 
 
@@ -81,17 +95,37 @@ rule Macro_Office_Shell_Suspeito
 }
 
 
-rule Script_Base64_Grande
+rule Script_Base64_Suspeito
 {
     meta:
-        descricao = "Bloco Base64 muito grande - comum em droppers ofuscados"
+        descricao = "Base64 grande acompanhado de execucao/download (dropper ofuscado)"
         mitre      = "T1027 Obfuscated Files or Information"
         severidade = "media"
 
     strings:
-        // 400+ chars base64 seguidos
-        $b64 = /[A-Za-z0-9+\/]{400,}={0,2}/
+        // 1500+ chars base64 em uma linha (certificados PEM tem quebras)
+        $b64 = /[A-Za-z0-9+\/]{1500,}={0,2}/
+
+        // Contexto de execucao/download que valida o dropper
+        $exec1 = "FromBase64String" nocase
+        $exec2 = "frombase64" nocase
+        $exec3 = "IEX" nocase
+        $exec4 = "Invoke-Expression" nocase
+        $exec5 = "DownloadString" nocase
+        $exec6 = "DownloadData" nocase
+        $exec7 = "eval(" nocase
+        $exec8 = "WScript.Shell" nocase
+        $exec9 = "powershell -" nocase
+        $exec10 = "cmd /c" nocase
+
+        // Sinais que indicam certificado legitimo - excluem
+        $cert1 = "-----BEGIN CERTIFICATE-----"
+        $cert2 = "-----BEGIN PUBLIC KEY-----"
+        $cert3 = "-----BEGIN RSA PRIVATE KEY-----"
+        $cert4 = "-----BEGIN PRIVATE KEY-----"
+        $cert5 = "-----BEGIN DH PARAMETERS-----"
+        $cert6 = "-----BEGIN PGP"
 
     condition:
-        $b64
+        $b64 and any of ($exec*) and not any of ($cert*)
 }
