@@ -70,6 +70,9 @@ echo.
 echo   QUARENTENA
 echo    12. Listar arquivos em quarentena
 echo.
+echo   PAINEL
+echo    20. Abrir painel web (navegador)
+echo.
 echo     0. Sair
 echo.
 set "opcao="
@@ -94,6 +97,7 @@ if "%opcao%"=="16" goto fullscan_quarentena
 if "%opcao%"=="17" goto procs
 if "%opcao%"=="18" goto hosts
 if "%opcao%"=="19" goto feeds_update
+if "%opcao%"=="20" goto painel
 if "%opcao%"=="0"  goto sair
 
 echo [!] Opcao invalida.
@@ -224,8 +228,14 @@ python av.py hosts
 goto pausa
 
 :feeds_update
-echo [i] Baixando feeds gratuitos (MalwareBazaar + URLHaus)...
+echo [i] Baixando feeds gratuitos (MalwareBazaar + ThreatFox)...
 python av.py feeds-update
+goto pausa
+
+:painel
+echo [i] Abrindo o painel em http://127.0.0.1:8765  (Ctrl+C encerra)
+python -c "import flask" >nul 2>&1 || python -m pip install flask
+python web\app.py
 goto pausa
 
 rem ---- CONTROLE -------------------------------------------------------

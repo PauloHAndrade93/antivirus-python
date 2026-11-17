@@ -78,6 +78,8 @@ Sem a chave, o scanner de hash funciona em **modo offline**: só compara contra 
 
 ### 3. Rodar
 
+**Opção mais bonita:** duplo-clique em **`painel.bat`** — abre o painel web no navegador (veja abaixo).
+
 **Opção fácil (Windows):** duplo-clique em **`av-py.bat`** — abre um menu com todas as ações.
 
 **Opção manual:**
@@ -132,6 +134,17 @@ python av.py feeds-update
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### 🖥️ Painel web local
+
+`painel.bat` (ou `python web/app.py`) sobe um painel em **http://127.0.0.1:8765** e abre o navegador:
+
+- **Painel** — status da proteção, contadores (hashes, regras YARA, URLs, quarentena), drives detectados e histórico da sessão
+- **Varreduras, Monitoramento, Auditoria, Inteligência** — todas as ações do AV-Py em formulários
+- **Console ao vivo** — a saída de cada tarefa aparece em tempo real, colorida, com métricas de progresso e botão de parar
+- **Quarentena e Relatórios** — lista de arquivos isolados e leitor dos logs
+
+Cuidados de segurança do próprio painel: escuta **só em 127.0.0.1**, exige um **token aleatório por execução** em toda ação (anti-CSRF), confere o cabecalho `Host` (anti DNS rebinding), valida cada parâmetro por lista branca, nunca usa shell e envia CSP restritiva. As chaves de API **nunca** chegam ao navegador — o painel só mostra se estão configuradas.
 
 ### ✅ Como funciona o Signature Check (whitelist)
 
@@ -236,7 +249,7 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 - [x] Process Scanner (LOLBAS, impersonação, extensão dupla)
 - [x] Hosts Integrity (bloqueio AV / pharming)
 - [x] Threat Feeds (MalwareBazaar + URLHaus auto-update)
-- [ ] Dashboard web local (Flask) com histórico de alertas
+- [x] Painel web local (Flask) com console ao vivo, quarentena e relatórios
 - [ ] Watcher automático de USB (auto-scan ao inserir)
 - [ ] Integração com MITRE ATT&CK — classificar cada detecção por técnica
 
