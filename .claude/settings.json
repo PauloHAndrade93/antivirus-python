@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/testes_ao_parar.py",
+            "timeout": 180,
+            "statusMessage": "AV-Py: rodando testes antes de encerrar..."
+          }
+        ]
+      }
+    ]
+  }
+}

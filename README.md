@@ -243,12 +243,20 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 
 ## 🧪 Qualidade: testes, regressão e CI
 
-Um antivírus que erra para mais (falso positivo) cansa; que erra para menos deixa passar ameaça. Por isso as **regras do AV-Py estão escritas como testes** em `tests/` — 91 casos que rodam em cerca de 1 segundo:
+Um antivírus que erra para mais (falso positivo) cansa; que erra para menos deixa passar ameaça. Por isso as **regras do AV-Py estão escritas como testes** em `tests/` — 101 testes, sendo 10 deles geradores com 300 variações cada (~3.000 casos por rodada, ~20 s):
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest
 ```
+
+Ou duplo clique em **`testar.bat`** (roda da pasta certa — rodar `pytest` de `C:\Users\voce` faz ele varrer a pasta do usuário inteira).
+
+### 🤖 O agente que conserta e vacina
+
+- **Variações automáticas** (`tests/test_variacoes.py`, com [Hypothesis](https://hypothesis.readthedocs.io/)): cada teste descreve uma propriedade ("qualquer jeito de digitar a letra do drive vira `X:`") e centenas de variações são geradas para tentar quebrá-la. Quando acha uma, reduz ao menor exemplo que falha.
+- **Skill `corrigir-bug`** (`.claude/skills/corrigir-bug/SKILL.md`): o roteiro que o agente de IA segue — reproduzir com teste, corrigir a causa, gerar N variações do mesmo erro, provar tudo verde, registrar.
+- **Hook `Stop`** (`.claude/settings.json`): no Claude Code, o agente não consegue encerrar o trabalho com teste vermelho; a falha volta para ele corrigir (até 3 tentativas).
 
 Como o projeto trabalha:
 
@@ -272,6 +280,9 @@ Ao escrever a suíte, 28 testes começaram vermelhos. Entre os bugs reais encont
 | Letra de drive `E::` | O full scan pelo menu não selecionava nenhum drive |
 | Arquivo com 2 regras | O full scan tentava isolar o mesmo arquivo duas vezes |
 | Lista de hashes | Aceitava linhas de 64 caracteres que não eram hexadecimais |
+| Letra de drive com `/` *(achado pelas variações)* | `E/` virava `E/:` — a correção do `E::` só cobria `\` e `:` |
+| Drive só com separador *(achado pelas variações)* | `/` sozinho virava o "drive" `/:` |
+| Exclusões do full scan *(achado pelo CI no Linux)* | Só reconheciam caminhos com `\` |
 
 > Método inspirado no episódio do Flow com Fábio Akita sobre IA na prática: testes automatizados como "manual de instruções em código", testes de regressão para cada bug, dry-run e um "oráculo" que confirma o resultado antes de confiar na ferramenta.
 

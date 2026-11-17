@@ -13,6 +13,12 @@ logs/*
 # Marcador do launcher .bat (gerado na 1a execucao)
 .deps-ok
 
+# Estado local de testes / hook do agente
+.hypothesis/
+.pytest_cache/
+.claude/hooks/.tentativas
+.claude/settings.local.json
+
 # Segredos
 .env
 *.key

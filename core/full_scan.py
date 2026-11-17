@@ -19,6 +19,7 @@ disco inteiro, drives removiveis, cartoes. Por isso tem:
 from __future__ import annotations
 
 import os
+import string
 import sys
 import time
 from dataclasses import dataclass
@@ -64,11 +65,15 @@ def listar_drives() -> list[Drive]:
 
 
 def normalizar_letras(entradas: Iterable[str]) -> set[str]:
-    """Aceita 'C', 'c:', 'C:\\', ' E: ' ou 'E::' e devolve sempre {'C:'}."""
+    """
+    Aceita 'C', 'c:', 'C:\\', 'c:/', ' E: ' ou 'E::' e devolve sempre {'C:'}.
+    Qualquer coisa que nao seja UMA letra de A a Z e ignorada.
+    (Os testes de variacoes acharam 'E/' -> 'E/:' e '/' -> '/:'.)
+    """
     letras: set[str] = set()
     for d in entradas:
-        s = (d or "").strip().rstrip("\\").rstrip(":").upper()
-        if s:
+        s = (d or "").strip(" :\\/").upper()
+        if len(s) == 1 and s in string.ascii_uppercase:
             letras.add(s + ":")
     return letras
 

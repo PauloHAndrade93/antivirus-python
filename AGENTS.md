@@ -22,11 +22,23 @@ AV-Py é um antivírus / EDR leve **defensivo**, em Python, para estudo. Ele det
 6. **Rode os testes antes de commitar:** `python -m pytest -q`. O CI (GitHub Actions) roda a mesma suíte em Windows e Linux a cada push; ele precisa ficar verde.
 7. **Commits sem linha de coautoria de IA** (preferência do autor do projeto).
 
+## O agente que conserta e vacina
+
+Quando aparecer um erro (traceback, falso positivo, teste vermelho), siga **`.claude/skills/corrigir-bug/SKILL.md`**:
+reproduzir com teste que falha → corrigir a causa → gerar **N variações** do mesmo erro (maiúsculas, separadores, vazio, limites, substring enganosa, plataforma, unicode) → suíte inteira verde → registrar no README.
+
+No Claude Code isso é automático em dois pontos:
+- **`/corrigir-bug`** chama a skill.
+- **Hook `Stop`** (`.claude/settings.json` → `.claude/hooks/testes_ao_parar.py`): quando o agente tenta encerrar com mudanças pendentes, a suíte roda; se algo falhar, o agente é mandado de volta para corrigir (até 3 tentativas).
+
+Outros harnesses (Codex, Antigravity…) não têm o hook: rode `python -m pytest` antes de encerrar e siga a mesma skill.
+
 ## Comandos
 
 ```bash
 pip install -r requirements-dev.txt     # dependências + pytest
-python -m pytest -q                     # suíte completa (~1 s)
+python -m pytest                        # suíte completa (~20 s, com ~3.000 variações)
+testar.bat                              # o mesmo, por duplo clique
 python av.py --help                     # CLI
 python web/app.py                       # painel em http://127.0.0.1:8765
 ```
