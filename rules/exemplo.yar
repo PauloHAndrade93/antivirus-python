@@ -103,8 +103,11 @@ rule Script_Base64_Suspeito
         severidade = "media"
 
     strings:
-        // 1500+ chars base64 em uma linha (certificados PEM tem quebras)
-        $b64 = /[A-Za-z0-9+\/]{1500,}={0,2}/
+        // 1000+ chars base64 em uma linha (certificados PEM tem quebras).
+        // ATENCAO: o YARA ignora em silencio repeticoes acima de {1024} -
+        // uma regra com {1500,} compila sem erro e NUNCA dispara.
+        // O teste tests/test_regras_yara.py::test_base64_com_execucao pega isso.
+        $b64 = /[A-Za-z0-9+\/]{1000,}={0,2}/
 
         // Contexto de execucao/download que valida o dropper
         $exec1 = "FromBase64String" nocase

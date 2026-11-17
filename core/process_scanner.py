@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
+from pathlib import PureWindowsPath
 
 import psutil
 
@@ -68,6 +67,37 @@ def _nome_processo(pid: int) -> str:
         return "?"
 
 
+def avaliar_processo(nome: str, exe: str, pai_nome: str) -> list[str]:
+    """Aplica as heuristicas a um processo. Funcao pura: facil de testar."""
+    nome = (nome or "").lower()
+    pai_nome = (pai_nome or "").lower()
+    sinais: list[str] = []
+
+    # 1) pasta de execucao suspeita
+    if exe:
+        for pad in PASTAS_SUSPEITAS:
+            if pad.search(exe):
+                sinais.append(f"executa de {pad.pattern}")
+                break
+
+    # 2) interpretador com pai de Office/Mail/Acrobat (LOLBAS)
+    if nome in INTERPRETADORES and pai_nome in PAIS_SUSPEITOS:
+        sinais.append(f"interpretador '{nome}' iniciado por '{pai_nome}' (LOLBAS classico)")
+
+    # 3) impersonacao: nome de servico do Windows rodando fora de C:\Windows
+    if nome in NOMES_SISTEMA_IMPERSONADOS and exe:
+        if not exe.lower().startswith("c:\\windows\\"):
+            sinais.append(f"nome '{nome}' mas executa de {exe} (impersonacao?)")
+
+    # 4) extensao dupla (arquivo.pdf.exe, nota.doc.exe, ...)
+    p_nome = PureWindowsPath(exe).name.lower() if exe else nome
+    partes = p_nome.split(".")
+    if len(partes) >= 3 and partes[-2] in ("pdf", "doc", "docx", "xls", "xlsx", "txt", "jpg", "png", "zip"):
+        sinais.append(f"extensao dupla suspeita: {p_nome}")
+
+    return sinais
+
+
 def auditar() -> list[AlertaProc]:
     alertas: list[AlertaProc] = []
     for p in psutil.process_iter(attrs=["pid", "name", "exe", "ppid"]):
@@ -82,29 +112,7 @@ def auditar() -> list[AlertaProc]:
         ppid = info.get("ppid") or 0
         pai_nome = _nome_processo(ppid)
 
-        sinais: list[str] = []
-
-        # 1) pasta de execucao suspeita
-        if exe:
-            for pad in PASTAS_SUSPEITAS:
-                if pad.search(exe):
-                    sinais.append(f"executa de {pad.pattern}")
-                    break
-
-        # 2) interpretador com pai de Office/Mail/Acrobat (LOLBAS)
-        if nome in INTERPRETADORES and pai_nome in PAIS_SUSPEITOS:
-            sinais.append(f"interpretador '{nome}' iniciado por '{pai_nome}' (LOLBAS classico)")
-
-        # 3) impersonacao: nome de servico do Windows rodando fora de C:\Windows
-        if nome in NOMES_SISTEMA_IMPERSONADOS and exe:
-            if not exe.lower().startswith(("c:\\windows", r"c:\windows")):
-                sinais.append(f"nome '{nome}' mas executa de {exe} (impersonacao?)")
-
-        # 4) extensao dupla (arquivo.pdf.exe, nota.doc.exe, ...)
-        p_nome = Path(exe).name.lower() if exe else nome
-        partes = p_nome.split(".")
-        if len(partes) >= 3 and partes[-2] in ("pdf", "doc", "docx", "xls", "xlsx", "txt", "jpg", "png", "zip"):
-            sinais.append(f"extensao dupla suspeita: {p_nome}")
+        sinais = avaliar_processo(nome, exe, pai_nome)
 
         if sinais:
             alertas.append(AlertaProc(

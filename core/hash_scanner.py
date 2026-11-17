@@ -48,7 +48,7 @@ def carregar_lista_local(caminho_lista: Path) -> set[str]:
     with open(caminho_lista, "r", encoding="utf-8") as f:
         for linha in f:
             linha = linha.strip().lower()
-            if linha and not linha.startswith("#") and len(linha) == 64:
+            if len(linha) == 64 and all(c in "0123456789abcdef" for c in linha):
                 hashes.add(linha)
     return hashes
 

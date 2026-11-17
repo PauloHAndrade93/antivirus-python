@@ -39,12 +39,12 @@ EXTENSOES_SUSPEITAS = {
     ".locked", ".encrypted", ".enc", ".crypt", ".crypted", ".cry",
     ".wncry", ".wncryt", ".wcry", ".wnry",
     ".ryk", ".ryuk",
-    ".lock", ".lockbit",
+    ".lockbit",          # '.lock' NAO entra: Cargo.lock, yarn.lock, poetry.lock sao legitimos
     ".conti", ".sodinokibi", ".revil",
     ".darkside", ".dharma", ".phobos",
     ".mamba", ".cerber", ".crysis",
     ".cry666", ".payforkey", ".pay2key",
-    ".id-", ".readme", ".help",
+    ".readme", ".help",
 }
 
 PADROES_NOTA_RESGATE = [
@@ -54,7 +54,8 @@ PADROES_NOTA_RESGATE = [
     re.compile(r"^readme[-_\s]*(for[-_\s]*)?recovery", re.I),
     re.compile(r"^decrypt[-_\s]*(instructions|me|files)", re.I),
     re.compile(r"^your[-_\s]*files[-_\s]*(are|have)", re.I),
-    re.compile(r"ransom", re.I),
+    # 'ransom' sozinho marcava ate o proprio ransom_watcher.py: exige cara de nota
+    re.compile(r"ransom.*\.(txt|html?|hta|rtf|url)$", re.I),
     re.compile(r"^!!!.*readme", re.I),
 ]
 

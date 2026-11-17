@@ -22,19 +22,22 @@ HOSTS_PATH = Path(os.environ.get("SystemRoot", r"C:\Windows")) / r"System32\driv
 
 IPS_BLOQUEIO = ("0.0.0.0", "127.0.0.1", "127.0.0.2", "::1", "::")
 
+# Os nomes precisam aparecer como "pedaco" do dominio (entre pontos ou hifens).
+# Antes era busca por substring: 'preset.example' casava 'eset' e
+# 'nextcloud.lan' casava o banco 'next'. Os testes cobrem esses casos.
 DOMINIOS_SECURITY_BLOQUEIO = re.compile(
-    r"(microsoft\.com|windowsupdate|wu\.ms|defender|smartscreen|"
+    r"(^|[.-])(microsoft|windowsupdate|defender|smartscreen|"
     r"avast|avg|avira|bitdefender|eset|kaspersky|mcafee|norton|sophos|"
-    r"trendmicro|malwarebytes|virustotal|abuse\.ch|crowdstrike|"
-    r"sentinelone|carbonblack)",
+    r"trendmicro|malwarebytes|virustotal|abuse|crowdstrike|"
+    r"sentinelone|carbonblack)([.-]|$)",
     re.I,
 )
 
 DOMINIOS_FINANCEIROS = re.compile(
-    r"(bb\.com\.br|bancobrasil|itau|bradesco|santander|caixa\.gov|"
-    r"nubank|interbank|inter\.co|c6bank|next|neon|picpay|"
+    r"(^|\.)(bb\.com\.br|bancobrasil|itau|bradesco|santander|caixa|"
+    r"nubank|bancointer|inter\.co|c6bank|banconext|neon|picpay|"
     r"paypal|mercadopago|pagseguro|"
-    r"binance|coinbase|kraken|bitfinex|mercadobitcoin|foxbit)",
+    r"binance|coinbase|kraken|bitfinex|mercadobitcoin|foxbit)(\.|$)",
     re.I,
 )
 

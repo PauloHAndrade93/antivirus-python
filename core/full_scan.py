@@ -63,6 +63,16 @@ def listar_drives() -> list[Drive]:
     return drives
 
 
+def normalizar_letras(entradas: Iterable[str]) -> set[str]:
+    """Aceita 'C', 'c:', 'C:\\', ' E: ' ou 'E::' e devolve sempre {'C:'}."""
+    letras: set[str] = set()
+    for d in entradas:
+        s = (d or "").strip().rstrip("\\").rstrip(":").upper()
+        if s:
+            letras.add(s + ":")
+    return letras
+
+
 def filtrar_drives(
     drives: list[Drive],
     apenas_usb: bool = False,
@@ -167,6 +177,17 @@ class DeteccaoCompleta:
     motor: str              # "hash", "yara"
     detalhe: str
     sha256: Optional[str] = None
+
+
+def unicos_por_arquivo(deteccoes: Iterable["DeteccaoCompleta"]) -> list["DeteccaoCompleta"]:
+    """Um arquivo pode casar varias regras; para isolar, so a primeira conta."""
+    vistos: set[Path] = set()
+    out: list[DeteccaoCompleta] = []
+    for d in deteccoes:
+        if d.arquivo not in vistos:
+            vistos.add(d.arquivo)
+            out.append(d)
+    return out
 
 
 def _iter_arquivos_robusto(raiz: Path, on_erro: Callable[[str], None]) -> Iterable[Path]:

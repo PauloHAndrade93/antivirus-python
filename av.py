@@ -118,10 +118,17 @@ def cmd_scan(args: argparse.Namespace) -> int:
         for m in matches:
             alvos.setdefault(m.arquivo, ("yara", None, f"{m.regra} {m.tags}"))
 
+        if args.dry_run:
+            info("SIMULACAO (--dry-run): nada sera movido.")
         for arquivo, (origem, sha, detalhe) in alvos.items():
             try:
-                destino = quarantine.isolar(arquivo, motivo=f"{origem}:{detalhe}", sha256=sha)
-                ok(f"Isolado: {arquivo}  ->  {destino}")
+                destino = quarantine.isolar(
+                    arquivo, motivo=f"{origem}:{detalhe}", sha256=sha, dry_run=args.dry_run,
+                )
+                if args.dry_run:
+                    info(f"Isolaria: {arquivo}  ->  {destino}")
+                else:
+                    ok(f"Isolado (hash conferido): {arquivo}  ->  {destino}")
             except OSError as e:
                 alerta(f"Nao consegui isolar {arquivo}: {e}")
 
@@ -172,14 +179,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
 def cmd_fullscan(args: argparse.Namespace) -> int:
     drives = full_scan.listar_drives()
 
-    letras = None
-    if args.drive:
-        # Aceita: "C", "C:", "C:\\", "c", "c:\\" -> sempre normaliza para "C:"
-        letras = set()
-        for d in args.drive:
-            s = d.strip().rstrip("\\").rstrip(":").upper()
-            if s:
-                letras.add(s + ":")
+    letras = full_scan.normalizar_letras(args.drive) if args.drive else None
     drives = full_scan.filtrar_drives(
         drives, apenas_usb=args.usb_only, somente_letras=letras,
     )
@@ -242,14 +242,22 @@ def cmd_fullscan(args: argparse.Namespace) -> int:
             print(f"  [{det.motor}] {det.arquivo}")
             print(f"       {det.detalhe}")
         if args.quarantine:
+            if args.dry_run:
+                info("SIMULACAO (--dry-run): nada sera movido.")
             isolados = 0
-            for det in todas:
+            for det in full_scan.unicos_por_arquivo(todas):
                 try:
-                    quarantine.isolar(det.arquivo, motivo=f"{det.motor}:{det.detalhe}", sha256=det.sha256)
+                    destino = quarantine.isolar(
+                        det.arquivo, motivo=f"{det.motor}:{det.detalhe}",
+                        sha256=det.sha256, dry_run=args.dry_run,
+                    )
+                    if args.dry_run:
+                        info(f"Isolaria: {det.arquivo}  ->  {destino}")
                     isolados += 1
                 except OSError as e:
                     alerta(f"Nao consegui isolar {det.arquivo}: {e}")
-            ok(f"{isolados} arquivo(s) isolado(s) em quarantine/.")
+            verbo = "seriam isolados" if args.dry_run else "isolado(s) em quarantine/ com hash conferido"
+            ok(f"{isolados} arquivo(s) {verbo}.")
         return 1
 
     ok("Nenhuma ameaca encontrada.")
@@ -399,6 +407,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Move arquivos detectados para quarentena.")
     s.add_argument("--vt", action="store_true",
                    help="Tambem consulta hashes nao-casados no VirusTotal (requer VT_API_KEY).")
+    s.add_argument("--dry-run", action="store_true",
+                   help="Com --quarantine: so mostra o que seria isolado, sem mover nada.")
     s.set_defaults(func=cmd_scan)
 
     n = sub.add_parser("netmon", help="Monitor de rede defensivo.")
@@ -421,6 +431,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Tambem consulta MalwareBazaar nos hashes (requer MALWAREBAZAAR_API_KEY).")
     fs.add_argument("--quarantine", action="store_true",
                     help="Isola o que for detectado em quarantine/.")
+    fs.add_argument("--dry-run", action="store_true",
+                    help="Com --quarantine: so mostra o que seria isolado, sem mover nada.")
     fs.set_defaults(func=cmd_fullscan)
 
     pp = sub.add_parser("procs", help="Audita processos em execucao (LOLBAS, pastas suspeitas).")

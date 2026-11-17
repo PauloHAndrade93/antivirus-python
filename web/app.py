@@ -123,6 +123,8 @@ def montar_argv(acao: str, p: dict) -> list[str]:
         argv = ["scan", _pasta(p.get("pasta", ""))]
         if _bool(p, "quarantine"):
             argv.append("--quarantine")
+            if _bool(p, "dry_run"):
+                argv.append("--dry-run")
         if _bool(p, "vt"):
             argv.append("--vt")
         return argv
@@ -139,6 +141,8 @@ def montar_argv(acao: str, p: dict) -> list[str]:
                 argv += ["--drive", drive]
         if _bool(p, "quarantine"):
             argv.append("--quarantine")
+            if _bool(p, "dry_run"):
+                argv.append("--dry-run")
         return argv
 
     if acao == "netmon":

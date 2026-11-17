@@ -1,5 +1,7 @@
 # 🛡️ AV-Py — Antivírus defensivo em Python
 
+[![testes](https://github.com/PauloHAndrade93/antivirus-python/actions/workflows/testes.yml/badge.svg)](https://github.com/PauloHAndrade93/antivirus-python/actions/workflows/testes.yml)
+
 > Projeto pessoal de cibersegurança: um **EDR leve** (Endpoint Detection and Response) escrito em Python, para estudo e proteção complementar ao antivírus do sistema.
 
 Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de verificação e monitoramento, pensada para quem está aprendendo segurança e quer entender, na prática, como as ferramentas profissionais funcionam.
@@ -238,6 +240,40 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 3. **Hashes públicos de IoCs** — pegue hashes da própria MalwareBazaar e coloque em arquivos fake de nome igual, pra testar o fluxo.
 
 ---
+
+## 🧪 Qualidade: testes, regressão e CI
+
+Um antivírus que erra para mais (falso positivo) cansa; que erra para menos deixa passar ameaça. Por isso as **regras do AV-Py estão escritas como testes** em `tests/` — 91 casos que rodam em cerca de 1 segundo:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Como o projeto trabalha:
+
+- **Regras como teste.** Cada regra YARA tem casos que *devem* casar e falsos positivos conhecidos que *não podem* casar. Mesma coisa para as heurísticas de ransomware, processos, hosts e persistência.
+- **Bug corrigido = teste de regressão.** O bug não volta sem o teste avisar.
+- **Simular antes de destruir.** `--dry-run` mostra o que a quarentena faria, sem mover nada.
+- **Conferir o resultado.** Ao isolar, o SHA-256 é calculado antes e depois de mover; se não bater, a operação é desfeita.
+- **CI.** O GitHub Actions roda a suíte em Windows e Linux a cada push (selo no topo).
+- **`AGENTS.md`.** Regras do projeto para qualquer pessoa ou agente de IA que for contribuir.
+
+### Bugs que os testes já pegaram
+
+Ao escrever a suíte, 28 testes começaram vermelhos. Entre os bugs reais encontrados:
+
+| Bug | Efeito |
+|-----|--------|
+| Regex YARA com `{1500,}` | O YARA ignora repetições acima de 1024 **em silêncio**: a regra de base64 malicioso compilava e **nunca disparava** |
+| Extensão `.lock` na lista de ransomware | `Cargo.lock`, `yarn.lock` e `poetry.lock` geravam alerta |
+| Padrão `ransom` em nome de arquivo | O próprio `ransom_watcher.py` era tratado como nota de resgate |
+| Busca por substring no `hosts` | `nextcloud.lan` virava "banco Next" e `preset.example` virava "ESET" |
+| Letra de drive `E::` | O full scan pelo menu não selecionava nenhum drive |
+| Arquivo com 2 regras | O full scan tentava isolar o mesmo arquivo duas vezes |
+| Lista de hashes | Aceitava linhas de 64 caracteres que não eram hexadecimais |
+
+> Método inspirado no episódio do Flow com Fábio Akita sobre IA na prática: testes automatizados como "manual de instruções em código", testes de regressão para cada bug, dry-run e um "oráculo" que confirma o resultado antes de confiar na ferramenta.
 
 ## 🧭 Roadmap
 
