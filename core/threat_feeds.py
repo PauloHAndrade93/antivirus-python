@@ -25,9 +25,11 @@ from typing import Iterable, Optional
 import requests
 
 MALWAREBAZAAR_API = "https://mb-api.abuse.ch/api/v1/"
-# URLHaus: o endpoint /api/v1/urls/recent/ passou a exigir metodo diferente.
-# O download CSV direto e mais estavel e aceita Auth-Key via header.
-URLHAUS_CSV       = "https://urlhaus.abuse.ch/downloads/csv_recent/"
+# ThreatFox: feed unificado da abuse.ch. Substitui o URLHaus desde que seus
+# endpoints publicos foram descontinuados em 2025. Retorna IoCs diversos
+# (URLs, dominios, IPs, hashes). Aqui filtramos so as URLs para popular
+# rules/urls_maliciosas.txt.
+THREATFOX_API     = "https://threatfox-api.abuse.ch/api/v1/"
 
 TIMEOUT = 30
 
@@ -98,31 +100,33 @@ def atualizar_malwarebazaar(destino: Path, selector: str = "100") -> tuple[int, 
     return adicionados, len(todos)
 
 
-def atualizar_urlhaus(destino: Path) -> tuple[int, int]:
+def atualizar_urlhaus(destino: Path, dias: int = 1) -> tuple[int, int]:
     """
-    Baixa URLs maliciosas recentes do URLHaus via CSV publico (com Auth-Key).
+    Baixa URLs maliciosas recentes do ThreatFox (abuse.ch).
     Retorna (adicionadas, total_final).
     """
     key = _exigir_chave()
-    resp = requests.get(
-        URLHAUS_CSV,
+    resp = requests.post(
+        THREATFOX_API,
+        json={"query": "get_iocs", "days": dias},
         headers={"Auth-Key": key},
         timeout=TIMEOUT,
     )
     resp.raise_for_status()
+    payload = resp.json()
+    if payload.get("query_status") != "ok":
+        raise RuntimeError(f"ThreatFox: query_status={payload.get('query_status')}")
 
-    # Formato CSV: "id","dateadded","url","url_status","last_online","threat","tags","urlhaus_link","reporter"
     novas: set[str] = set()
-    import csv, io
-    reader = csv.reader(io.StringIO(resp.text))
-    for linha in reader:
-        if not linha or linha[0].startswith("#"):
-            continue
-        if len(linha) < 3:
-            continue
-        url = linha[2].strip().strip('"')
-        if url.startswith(("http://", "https://")):
-            novas.add(url)
+    for item in payload.get("data", []):
+        ioc_type = (item.get("ioc_type") or "").lower()
+        ioc = (item.get("ioc") or "").strip()
+        if ioc_type == "url" and ioc.startswith(("http://", "https://")):
+            novas.add(ioc)
+        elif ioc_type in ("domain", "url") and "." in ioc:
+            # tambem aceita dominio puro - prefixa http://
+            if not ioc.startswith(("http://", "https://")):
+                novas.add("http://" + ioc)
 
     existentes: set[str] = set()
     if destino.exists():

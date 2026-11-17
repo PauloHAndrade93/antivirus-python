@@ -293,22 +293,25 @@ def cmd_feeds_update(args: argparse.Namespace) -> int:
         alerta('  setx ABUSE_CH_API_KEY "sua_chave"    (depois abra um CMD novo)')
         return 2
     pasta_regras = PASTA_REGRAS
-    try:
-        if args.urlhaus_only:
-            adic, total = threat_feeds.atualizar_urlhaus(pasta_regras / "urls_maliciosas.txt")
-            ok(f"URLHaus: +{adic} / total {total}")
-        elif args.mb_only:
+    falhas: list[str] = []
+
+    if not args.urlhaus_only:
+        try:
             adic, total = threat_feeds.atualizar_malwarebazaar(pasta_regras / "hashes_locais.txt")
             ok(f"MalwareBazaar: +{adic} / total {total}")
-        else:
-            adic1, tot1 = threat_feeds.atualizar_malwarebazaar(pasta_regras / "hashes_locais.txt")
-            ok(f"MalwareBazaar: +{adic1} / total {tot1}")
-            adic2, tot2 = threat_feeds.atualizar_urlhaus(pasta_regras / "urls_maliciosas.txt")
-            ok(f"URLHaus: +{adic2} / total {tot2}")
-    except Exception as e:
-        alerta(f"Falha ao atualizar feeds: {e}")
-        return 2
-    return 0
+        except Exception as e:
+            alerta(f"MalwareBazaar falhou: {e}")
+            falhas.append("MalwareBazaar")
+
+    if not args.mb_only:
+        try:
+            adic, total = threat_feeds.atualizar_urlhaus(pasta_regras / "urls_maliciosas.txt")
+            ok(f"ThreatFox (URLs): +{adic} / total {total}")
+        except Exception as e:
+            alerta(f"ThreatFox falhou: {e}")
+            falhas.append("ThreatFox")
+
+    return 1 if falhas else 0
 
 
 def cmd_vt(args: argparse.Namespace) -> int:
