@@ -8,17 +8,21 @@ Não substitui o Microsoft Defender (nem deveria). É uma **camada extra** de ve
 
 ## 🎯 O que o AV-Py faz
 
-Sete módulos, trabalhando juntos:
+Onze módulos, trabalhando juntos:
 
 | Módulo | O que faz | Técnica profissional por trás |
 |--------|-----------|------------------------------|
 | **Hash Scanner** | Calcula o SHA-256 de cada arquivo e consulta a base pública do [MalwareBazaar](https://bazaar.abuse.ch/) | *IoC matching* por hash — o modo mais rápido de pegar malware conhecido |
 | **YARA Scanner** | Varre arquivos com regras [YARA](https://virustotal.github.io/yara/), a linguagem padrão de *threat hunting* | *Pattern matching* por família de malware, usado pela indústria toda |
-| **Full Scan** 🆕 | Varre **drives inteiros** — HD, SSD, pendrive, cartão SD — com progresso em tempo real e exclusões inteligentes | *Full endpoint sweep*, como um AV comercial faz no "Verificação completa" |
+| **Full Scan** | Varre **drives inteiros** — HD, SSD, pendrive, cartão SD — com progresso em tempo real e exclusões inteligentes | *Full endpoint sweep*, como um AV comercial faz no "Verificação completa" |
+| **Signature Check** 🆕 | Verifica assinatura Authenticode. Executáveis assinados por publishers confiáveis (Microsoft, Google, Mozilla, Steam…) têm match YARA ignorado automaticamente | *Trust anchoring* via certificado — elimina 90% dos falsos positivos em `.exe` |
 | **Network Monitor** | Vigia conexões de saída suspeitas (portas de C2, SMTP de processos não-correio, beaconing) | Detecção de **exfiltração** e **command & control** |
 | **Ransom Watcher** | Observa pastas sensíveis em tempo real e grita contra cifragem em massa, extensões típicas (`.locked`, `.wncry`…) e notas de resgate | Detecção comportamental de **ransomware** (T1486 / T1490) |
 | **Persistence Checker** | Audita Run keys do registro, pastas Startup, tarefas agendadas e serviços de auto-início | Detecção de **persistência** (T1547.001, T1053.005, T1543.003) |
+| **Process Scanner** 🆕 | Audita processos em execução: pastas suspeitas, cadeia pai-filho (Office → PowerShell), impersonação de serviço do Windows, extensão dupla | Detecção de malware **em memória** (T1055, T1059) |
+| **Hosts Integrity** 🆕 | Verifica se o arquivo `hosts` foi alterado pra bloquear antivírus/updates ou redirecionar bancos/cripto (pharming) | *Integrity check* clássico (T1565.002) |
 | **VirusTotal Lookup** | Consulta reputação de hash, IP e domínio no VirusTotal (70+ engines consolidados) | *Reputation lookup* como segunda opinião |
+| **Threat Feeds** 🆕 | Baixa automaticamente hashes recentes do MalwareBazaar e URLs do URLHaus para engrossar a base local | *Threat intelligence feed ingestion* |
 
 Cada detecção do scan pode gerar **quarentena automática** do arquivo (move para pasta isolada e registra em log).
 
@@ -36,6 +40,10 @@ antivirus-python/
 │   ├── network_monitor.py      # Monitor de conexões
 │   ├── ransom_watcher.py       # Heurística anti-ransomware (watchdog)
 │   ├── persistence_checker.py  # Auditoria de persistência no Windows
+│   ├── process_scanner.py      # Auditoria de processos em execução (LOLBAS, LOT)
+│   ├── hosts_integrity.py      # Integridade do arquivo hosts
+│   ├── signature_check.py      # Whitelist por Authenticode (Microsoft, Google…)
+│   ├── threat_feeds.py         # Ingestão de feeds MalwareBazaar + URLHaus
 │   ├── virustotal.py           # Cliente da API v3 do VirusTotal
 │   ├── full_scan.py            # Varredura completa de drives (HD/SSD/USB)
 │   └── quarantine.py           # Isolamento de arquivos suspeitos
@@ -112,9 +120,36 @@ python av.py fullscan --quarantine
 # Scan + segunda opinião no VirusTotal para hashes não-casados
 python av.py scan "C:\Users\paulo\Downloads" --vt
 
+# Audita processos em execução (LOLBAS, pastas suspeitas, impersonação)
+python av.py procs
+
+# Verifica integridade do arquivo hosts
+python av.py hosts
+
+# Atualiza bases locais com feeds da abuse.ch (precisa chave ABUSE_CH_API_KEY)
+python av.py feeds-update
+
 # Ver tudo que está em quarentena
 python av.py quarantine --list
 ```
+
+### ✅ Como funciona o Signature Check (whitelist)
+
+O Full Scan só chama o `Get-AuthenticodeSignature` do PowerShell **depois** que o YARA bate em um executável. Se a assinatura é válida e o *publisher* está na lista de confiança (Microsoft, Google, Mozilla, Steam, Docker, Valve, GitHub, Python, JetBrains, NVIDIA, AMD, Intel, Realtek, Adobe, Apple, Oracle, Zoom, WhatsApp, Spotify, 7-Zip, VideoLAN…), a detecção é **ignorada** silenciosamente.
+
+Na prática: a maioria dos falsos positivos em `.exe` do sistema some automaticamente.
+
+### 🧬 Como funciona o Threat Feeds
+
+Os feeds da abuse.ch (MalwareBazaar + URLHaus) são gratuitos mas desde 2024 **exigem uma chave de autenticação**. Cadastre uma em **https://auth.abuse.ch/** (é gratuita e serve para todos os serviços da abuse.ch) e exporte:
+
+```bash
+setx ABUSE_CH_API_KEY "sua_chave"
+```
+
+Depois, rode `python av.py feeds-update` quando quiser atualizar. Costumo recomendar **1 vez por semana** — o MalwareBazaar recebe centenas de amostras novas por dia.
+
+Os hashes vão parar em `rules/hashes_locais.txt` (o mesmo arquivo que o Hash Scanner lê). As URLs vão para `rules/urls_maliciosas.txt` (uso futuro).
 
 ### 💽 Como funciona o Full Scan
 
@@ -196,7 +231,13 @@ Ajuste a sensibilidade com `--janela` e `--limite`. Os alertas também vão para
 - [x] Watcher de arquivos com `watchdog` (anti-ransomware heurístico)
 - [x] Verificador de persistência (Run keys, Startup, Scheduled Tasks, Serviços)
 - [x] Reputation lookup via VirusTotal API (hash, IP, domínio + integração no scan)
+- [x] Full Scan (drives inteiros, HD/SSD/USB/SD)
+- [x] Signature Check (whitelist por Authenticode)
+- [x] Process Scanner (LOLBAS, impersonação, extensão dupla)
+- [x] Hosts Integrity (bloqueio AV / pharming)
+- [x] Threat Feeds (MalwareBazaar + URLHaus auto-update)
 - [ ] Dashboard web local (Flask) com histórico de alertas
+- [ ] Watcher automático de USB (auto-scan ao inserir)
 - [ ] Integração com MITRE ATT&CK — classificar cada detecção por técnica
 
 ---

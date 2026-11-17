@@ -15,8 +15,9 @@ import sys
 from pathlib import Path
 
 from core import (
-    full_scan, hash_scanner, network_monitor, persistence_checker,
-    quarantine, ransom_watcher, virustotal, yara_scanner,
+    full_scan, hash_scanner, hosts_integrity, network_monitor,
+    persistence_checker, process_scanner, quarantine, ransom_watcher,
+    threat_feeds, virustotal, yara_scanner,
 )
 
 PASTA_REGRAS = Path(__file__).parent / "rules"
@@ -255,6 +256,61 @@ def cmd_fullscan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_procs(args: argparse.Namespace) -> int:
+    alertas = process_scanner.auditar()
+    if not alertas:
+        ok("Nenhum processo suspeito detectado.")
+        return 0
+    for a in alertas:
+        alerta(f"[pid {a.pid}] {a.nome}")
+        print(f"       caminho: {a.caminho or '(sem exe)'}")
+        print(f"       pai:     {a.pai_nome} (pid {a.pai_pid})")
+        for s in a.sinais:
+            print(f"       sinal:   {s}")
+    alerta(f"{len(alertas)} processo(s) suspeito(s).")
+    return 1
+
+
+def cmd_hosts(args: argparse.Namespace) -> int:
+    alertas = hosts_integrity.auditar()
+    if not alertas:
+        ok(f"Arquivo hosts limpo ({hosts_integrity.HOSTS_PATH}).")
+        return 0
+    for a in alertas:
+        if a.tipo == "erro":
+            alerta(f"erro: {a.detalhe}")
+            continue
+        alerta(f"[linha {a.numero_linha}] {a.linha}")
+        print(f"       tipo:    {a.tipo}")
+        print(f"       detalhe: {a.detalhe}")
+    return 1
+
+
+def cmd_feeds_update(args: argparse.Namespace) -> int:
+    if not threat_feeds.obter_api_key():
+        alerta("Chave abuse.ch nao configurada.")
+        alerta("Cadastre gratuitamente em https://auth.abuse.ch/ e exporte:")
+        alerta('  setx ABUSE_CH_API_KEY "sua_chave"    (depois abra um CMD novo)')
+        return 2
+    pasta_regras = PASTA_REGRAS
+    try:
+        if args.urlhaus_only:
+            adic, total = threat_feeds.atualizar_urlhaus(pasta_regras / "urls_maliciosas.txt")
+            ok(f"URLHaus: +{adic} / total {total}")
+        elif args.mb_only:
+            adic, total = threat_feeds.atualizar_malwarebazaar(pasta_regras / "hashes_locais.txt")
+            ok(f"MalwareBazaar: +{adic} / total {total}")
+        else:
+            adic1, tot1 = threat_feeds.atualizar_malwarebazaar(pasta_regras / "hashes_locais.txt")
+            ok(f"MalwareBazaar: +{adic1} / total {tot1}")
+            adic2, tot2 = threat_feeds.atualizar_urlhaus(pasta_regras / "urls_maliciosas.txt")
+            ok(f"URLHaus: +{adic2} / total {tot2}")
+    except Exception as e:
+        alerta(f"Falha ao atualizar feeds: {e}")
+        return 2
+    return 0
+
+
 def cmd_vt(args: argparse.Namespace) -> int:
     api_key = os.environ.get("VT_API_KEY", "")
     if not api_key:
@@ -363,6 +419,17 @@ def build_parser() -> argparse.ArgumentParser:
     fs.add_argument("--quarantine", action="store_true",
                     help="Isola o que for detectado em quarantine/.")
     fs.set_defaults(func=cmd_fullscan)
+
+    pp = sub.add_parser("procs", help="Audita processos em execucao (LOLBAS, pastas suspeitas).")
+    pp.set_defaults(func=cmd_procs)
+
+    hh = sub.add_parser("hosts", help="Verifica integridade do arquivo hosts.")
+    hh.set_defaults(func=cmd_hosts)
+
+    fu = sub.add_parser("feeds-update", help="Atualiza feeds gratuitos (MalwareBazaar + URLHaus).")
+    fu.add_argument("--mb-only", action="store_true", help="So MalwareBazaar.")
+    fu.add_argument("--urlhaus-only", action="store_true", help="So URLHaus.")
+    fu.set_defaults(func=cmd_feeds_update)
 
     vt = sub.add_parser("vt", help="Consulta VirusTotal (hash, IP ou dominio).")
     vt.add_argument("alvos", nargs="+", help="Um ou mais hashes, IPs ou dominios.")

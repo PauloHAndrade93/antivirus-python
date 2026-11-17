@@ -60,9 +60,12 @@ echo.
 echo   AUDITORIA
 echo     9. Auditar persistencia (so suspeitos)
 echo    10. Auditar persistencia (inventario completo)
+echo    17. Auditar processos em execucao
+echo    18. Checar integridade do arquivo hosts
 echo.
-echo   VIRUSTOTAL
+echo   VIRUSTOTAL e FEEDS
 echo    11. Consultar hash, IP ou dominio no VirusTotal
+echo    19. Atualizar feeds gratuitos (MalwareBazaar + URLHaus)
 echo.
 echo   QUARENTENA
 echo    12. Listar arquivos em quarentena
@@ -88,6 +91,9 @@ if "%opcao%"=="13" goto fullscan_todos
 if "%opcao%"=="14" goto fullscan_usb
 if "%opcao%"=="15" goto fullscan_drive
 if "%opcao%"=="16" goto fullscan_quarentena
+if "%opcao%"=="17" goto procs
+if "%opcao%"=="18" goto hosts
+if "%opcao%"=="19" goto feeds_update
 if "%opcao%"=="0"  goto sair
 
 echo [!] Opcao invalida.
@@ -205,6 +211,21 @@ goto pausa
 echo [i] Full scan com quarentena automatica (isola o que achar).
 echo     Revise a pasta quarantine\ antes de apagar.
 python av.py fullscan --quarantine
+goto pausa
+
+rem ---- EXTRAS ---------------------------------------------------------
+
+:procs
+python av.py procs
+goto pausa
+
+:hosts
+python av.py hosts
+goto pausa
+
+:feeds_update
+echo [i] Baixando feeds gratuitos (MalwareBazaar + URLHaus)...
+python av.py feeds-update
 goto pausa
 
 rem ---- CONTROLE -------------------------------------------------------

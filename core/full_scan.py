@@ -27,6 +27,8 @@ from typing import Callable, Iterable, Optional
 
 import psutil
 
+from . import signature_check
+
 
 # ---------- enumeracao de drives ---------- #
 
@@ -200,6 +202,7 @@ def escanear_drive(
     intervalo_progresso: int = 500,
     on_progresso: Optional[Callable[[Progresso], None]] = None,
     progresso: Optional[Progresso] = None,
+    whitelist_signed: bool = True,
 ) -> tuple[list[DeteccaoCompleta], Progresso]:
     """
     Varre um drive aplicando hash + YARA. Reutiliza 'progresso' se vier
@@ -255,12 +258,22 @@ def escanear_drive(
             try:
                 matches = ruleset_yara.match(str(arquivo), timeout=20)
                 progresso.total_yara += 1
-                for m in matches:
-                    progresso.deteccoes += 1
-                    deteccoes.append(DeteccaoCompleta(
-                        arquivo=arquivo, motor="yara",
-                        detalhe=f"regra {m.rule} tags={list(m.tags)}",
-                    ))
+                if matches:
+                    # Whitelist por assinatura Authenticode (so se o match for em executavel)
+                    assin = None
+                    if whitelist_signed:
+                        assin = signature_check.verificar(arquivo)
+                        if assin.confiavel:
+                            # Ignora - executavel assinado por publisher confiavel
+                            continue
+                    for m in matches:
+                        progresso.deteccoes += 1
+                        detalhe = f"regra {m.rule} tags={list(m.tags)}"
+                        if assin and assin.publisher:
+                            detalhe += f"  [assinado por: {assin.publisher}, status={assin.status}]"
+                        deteccoes.append(DeteccaoCompleta(
+                            arquivo=arquivo, motor="yara", detalhe=detalhe,
+                        ))
             except (OSError, PermissionError):
                 progresso.erros += 1
             except Exception:
