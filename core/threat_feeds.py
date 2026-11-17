@@ -25,7 +25,9 @@ from typing import Iterable, Optional
 import requests
 
 MALWAREBAZAAR_API = "https://mb-api.abuse.ch/api/v1/"
-URLHAUS_API       = "https://urlhaus-api.abuse.ch/v1/urls/recent/"
+# URLHaus: o endpoint /api/v1/urls/recent/ passou a exigir metodo diferente.
+# O download CSV direto e mais estavel e aceita Auth-Key via header.
+URLHAUS_CSV       = "https://urlhaus.abuse.ch/downloads/csv_recent/"
 
 TIMEOUT = 30
 
@@ -98,23 +100,27 @@ def atualizar_malwarebazaar(destino: Path, selector: str = "100") -> tuple[int, 
 
 def atualizar_urlhaus(destino: Path) -> tuple[int, int]:
     """
-    Baixa URLs maliciosas recentes do URLHaus (API v1).
+    Baixa URLs maliciosas recentes do URLHaus via CSV publico (com Auth-Key).
     Retorna (adicionadas, total_final).
     """
     key = _exigir_chave()
-    resp = requests.post(
-        URLHAUS_API,
+    resp = requests.get(
+        URLHAUS_CSV,
         headers={"Auth-Key": key},
         timeout=TIMEOUT,
     )
     resp.raise_for_status()
-    payload = resp.json()
-    if payload.get("query_status") != "ok":
-        raise RuntimeError(f"URLHaus: query_status={payload.get('query_status')}")
 
+    # Formato CSV: "id","dateadded","url","url_status","last_online","threat","tags","urlhaus_link","reporter"
     novas: set[str] = set()
-    for item in payload.get("urls", []):
-        url = (item.get("url") or "").strip()
+    import csv, io
+    reader = csv.reader(io.StringIO(resp.text))
+    for linha in reader:
+        if not linha or linha[0].startswith("#"):
+            continue
+        if len(linha) < 3:
+            continue
+        url = linha[2].strip().strip('"')
         if url.startswith(("http://", "https://")):
             novas.add(url)
 
