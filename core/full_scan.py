@@ -137,7 +137,8 @@ ARQUIVOS_EXCLUIDOS = {
 
 def _deve_pular_pasta(caminho: Path, raiz: Path) -> bool:
     try:
-        rel = str(caminho.relative_to(raiz)).lower()
+        # normaliza o separador: as exclusoes usam '\', mas no Linux vem '/'
+        rel = str(caminho.relative_to(raiz)).lower().replace("/", "\\")
     except ValueError:
         return False
     for excl in PASTAS_EXCLUIDAS:
